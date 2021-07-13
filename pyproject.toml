@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "devm"
+version = "0.1.0"
+description = "A package manager for developer workflows."
+authors = ["4thel00z <4thel00z@gmail.com>"]
+license = "GPL-3"
+packages = [
+    { include = "libdevm" },
+    { include = "devm" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+sploitkit = "^0.5.0"
+requests = "^2.25.1"
+xtract = "^0.1a3"
+
+[tool.poetry.dev-dependencies]
+black = "^21.6b0"
+pytest = "^6.2.4"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
