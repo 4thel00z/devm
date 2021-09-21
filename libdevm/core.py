@@ -1,17 +1,22 @@
 import os
 import shutil
 import subprocess
+from collections import namedtuple
 from dataclasses import (
     dataclass
 )
 from typing import (
     List,
     Optional,
-    Callable, Tuple
+    Callable,
+    Tuple,
+    Any,
 )
 
 import requests as requests
 from xtract import xtract
+
+StepExecutionResult = namedtuple("StepExecutionResult", ["return_code", "stdout", "stderr"])
 
 
 class BuilderException(BaseException):
@@ -32,10 +37,10 @@ class CurrentHooksNotSet(BuilderException):
 
 @dataclass
 class Hook:
-    steps: List[Callable]
+    steps: List[Callable[[Any, Any], StepExecutionResult]]
     description: Optional[str]
 
-    def __call__(self, *args, **kwargs) -> List[Tuple[int, bytes, bytes]]:
+    def __call__(self, *args, **kwargs) -> List[StepExecutionResult]:
         r = []
         for step in self.steps:
             r.append(step(*args, **kwargs))
@@ -68,10 +73,10 @@ class Builder:
                 with open(path, 'wb') as f:
                     r.raw.decode_content = True
                     shutil.copyfileobj(r.raw, f)
-                    return 0, b"downloaded to " + path.encode("utf-8", errors="ignore"), b""
+                    return StepExecutionResult(os.EX_OK, b"downloaded to " + path.encode("utf-8", errors="ignore"), b"")
 
             except Exception as err:
-                return os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore")
+                return StepExecutionResult(os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore"))
 
         self._current_hook.steps.append(step_)
         return self
@@ -98,9 +103,9 @@ class Builder:
                     b"to",
                     dest.encode("utf-8", errors="ignore")
                 ))
-                return 0, stdout, b""
+                return StepExecutionResult(os.EX_OK, stdout, b"")
             except Exception as err:
-                return os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore")
+                return StepExecutionResult(os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore"))
 
         self._current_hook.steps.append(step_)
         return self
@@ -111,9 +116,9 @@ class Builder:
         def step_() -> Tuple[int, bytes, bytes]:
             try:
                 shutil.rmtree(path)
-                return 0, b"removed " + path.encode("utf-8", errors="ignore"), b""
+                return StepExecutionResult(os.EX_OK, b"removed " + path.encode("utf-8", errors="ignore"), b"")
             except Exception as err:
-                return os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore")
+                return StepExecutionResult(os.EX_SOFTWARE, b"", str(err).encode("utf-8", errors="ignore"))
 
         self._current_hook.steps.append(step_)
         return self
@@ -126,7 +131,7 @@ class Builder:
             if not cwd:
                 cwd = os.getcwd()
             p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return p.returncode, p.stdout, p.stderr
+            return StepExecutionResult(p.returncode, p.stdout, p.stderr)
 
         self._current_hook.steps.append(step_)
         return self
@@ -193,7 +198,7 @@ class Recipe:
         return self.uninstall_hook()
 
     def is_updated(self) -> bool:
-        return all((r[0] == 0 for r in self.is_updated_hook()))
+        return all((r.return_code == 0 for r in self.is_updated_hook()))
 
 
 def recipe(name: str, description: str = "") -> Builder:
